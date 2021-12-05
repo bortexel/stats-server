@@ -6,6 +6,7 @@ package graph
 import (
 	"context"
 	"errors"
+
 	"github.com/bortexel/stats-server/database"
 	"github.com/bortexel/stats-server/graph/generated"
 	"github.com/bortexel/stats-server/graph/model"

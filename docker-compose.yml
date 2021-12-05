@@ -1,0 +1,22 @@
+version: '3'
+services:
+  website:
+    image: registry.ruscalworld.ru/bortexel/stats-server:latest
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      MONGO_URL: mongodb://stats:Ep5bSah5zl@mongo:27017/
+      MUTATION_KEY: 'Co+C@t"eJ.N=rGfwu(V_nA;LXnV`[J'
+    ports:
+      - '7070:3000'
+  mongo:
+    image: mongo:latest
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: stats
+      MONGO_INITDB_ROOT_PASSWORD: Ep5bSah5zl
+volumes:
+  mongo-data:

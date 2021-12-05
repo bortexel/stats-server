@@ -6,10 +6,10 @@ services:
     depends_on:
       - mongo
     environment:
-      MONGO_URL: mongodb://stats:Ep5bSah5zl@mongo:27017/
-      MUTATION_KEY: 'Co+C@t"eJ.N=rGfwu(V_nA;LXnV`[J'
+      MONGO_CONNECTION_URI: mongodb://stats:replace-this@mongo:27017/
+      MUTATION_KEY: ''
     ports:
-      - '7070:3000'
+      - '7070:8080'
   mongo:
     image: mongo:latest
     restart: unless-stopped
@@ -17,6 +17,6 @@ services:
       - mongo-data:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: stats
-      MONGO_INITDB_ROOT_PASSWORD: Ep5bSah5zl
+      MONGO_INITDB_ROOT_PASSWORD: replace-this
 volumes:
   mongo-data:

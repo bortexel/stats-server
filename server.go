@@ -171,7 +171,7 @@ func HandleUpdatePlayer(_ *http.Request, body []byte) (any, error, int) {
 
 	blocksBroken := 0
 	for _, value := range request.Stats[database.StatMined] {
-		blocksBroken += value.(int)
+		blocksBroken += int(value.(float64))
 	}
 
 	stats[database.StatHelpers]["bortexel:blocks_broken"] = blocksBroken

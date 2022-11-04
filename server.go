@@ -21,6 +21,8 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 	var next ActionHandler
 
 	switch r.Method {
+	case http.MethodGet: // Root (health checks, etc.)
+		next = HandleRoot
 	case http.MethodPost: // Request leaderboard
 		next = HandlePlayerInfo
 	case http.MethodPatch: // Update player info
@@ -50,6 +52,10 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 	if data != nil {
 		handleData(w, data)
 	}
+}
+
+func HandleRoot(_ *http.Request, _ []byte) (any, error, int) {
+	return nil, nil, http.StatusNoContent
 }
 
 type LeaderboardRequest struct {

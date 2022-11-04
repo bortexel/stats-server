@@ -12,9 +12,10 @@ var (
 )
 
 func InitDatabase(uri string) (err error) {
-	Client, err = mongo.Connect(context.Background(), options.Client().ApplyURI(uri))
+	clientOptions := options.Client().ApplyURI(uri)
+	Client, err = mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
-		return
+		return err
 	}
 
 	Database = Client.Database("stats")

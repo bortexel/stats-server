@@ -1,54 +1,225 @@
 package main
 
 import (
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"os"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/bortexel/stats-server/database"
-	"github.com/bortexel/stats-server/graph"
-	"github.com/bortexel/stats-server/graph/generated"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const defaultPort = "8080"
+type ActionHandler func(r *http.Request, input []byte) (output any, err error, status int)
 
-func main() {
-	uri, ok := os.LookupEnv("MONGO_CONNECTION_URI")
-	if !ok {
-		log.Fatalln("MONGO_CONNECTION_URI variable is empty")
+func MainHandler(w http.ResponseWriter, r *http.Request) {
+	var next ActionHandler
+
+	switch r.Method {
+	case http.MethodPost: // Request leaderboard
+		next = HandlePlayerInfo
+	case http.MethodPatch: // Update player info
+		next = ConfiguredAuthorizationMiddleware(HandleUpdatePlayer)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	err := database.InitDatabase(uri)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Println("Unable to init database:", err)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = defaultPort
+	data, err, status := next(r, body)
+	w.WriteHeader(status)
+
+	if err != nil {
+		if status >= 500 {
+			log.Println("Error serving", r.Method, "request:", err)
+		}
+
+		return
 	}
 
-	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
+	if data != nil {
+		handleData(w, data)
+	}
+}
 
-	router := chi.NewRouter()
-	router.Use(middleware.Logger)
+type PlayerInfoRequest struct {
+	Sort   SortOptions      `json:"sort"`
+	Server ServerIdentifier `json:"server"`
+}
 
-	key, ok := os.LookupEnv("MUTATION_KEY")
-	if !ok {
-		log.Fatalln("MUTATION_KEY is not set")
+type ServerIdentifier struct {
+	ServerName string `json:"serverName"`
+	Season     int    `json:"season"`
+}
+
+func (i ServerIdentifier) String() string {
+	return fmt.Sprintf("%s_%d", i.ServerName, i.Season)
+}
+
+func (r PlayerInfoRequest) ShouldSort() bool {
+	return r.Sort.FieldName != ""
+}
+
+type SortDirection string
+
+const (
+	SortDirectionAscending  = "ascending"
+	SortDirectionDescending = "descending"
+)
+
+type SortOptions struct {
+	FieldName string        `json:"fieldName"`
+	Direction SortDirection `json:"direction"`
+}
+
+func (o SortOptions) GetDirection() SortDirection {
+	if o.Direction == SortDirectionAscending {
+		return SortDirectionAscending
+	}
+
+	return SortDirectionDescending
+}
+
+func (d SortDirection) getValue() int {
+	if d == SortDirectionAscending {
+		return 1
+	}
+
+	return -1
+}
+
+func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
+	var request PlayerInfoRequest
+	err := json.Unmarshal(body, &request)
+	if err != nil {
+		return nil, err, http.StatusUnprocessableEntity
+	}
+
+	opts := options.Find()
+	if request.ShouldSort() {
+		opts.SetSort(bson.D{{request.Sort.FieldName, request.Sort.GetDirection().getValue()}})
+	}
+
+	cursor, err := database.Database.Collection(request.Server.String()).Find(context.Background(), bson.D{}, opts)
+	if err != nil {
+		return nil, err, http.StatusInternalServerError
+	}
+
+	var results []*database.StoredPlayer
+	err = cursor.All(context.Background(), &results)
+
+	if err == mongo.ErrNoDocuments || results == nil {
+		return nil, err, http.StatusNotFound
+	}
+
+	if err != nil {
+		return nil, err, http.StatusInternalServerError
+	}
+
+	return results, nil, http.StatusOK
+}
+
+type UpdatePlayerRequest struct {
+	Server       ServerIdentifier        `json:"server"`
+	UUID         string                  `json:"uuid"`
+	Name         string                  `json:"name"`
+	Stats        database.StatsContainer `json:"stats"`
+	Advancements []*AdvancementInput     `json:"advancements"`
+}
+
+type AdvancementInput struct {
+	Key  string `json:"key"`
+	Done bool   `json:"done"`
+}
+
+func HandleUpdatePlayer(_ *http.Request, body []byte) (any, error, int) {
+	var request UpdatePlayerRequest
+	request.Stats = database.MakeStatsContainer()
+	err := json.Unmarshal(body, &request)
+	if err != nil {
+		return nil, err, http.StatusUnprocessableEntity
+	}
+
+	advancements := make([]*database.Advancement, 0)
+	stats := request.Stats
+
+	for _, advancement := range request.Advancements {
+		if !advancement.Done {
+			continue
+		}
+
+		advancements = append(advancements, &database.Advancement{
+			Key: advancement.Key,
+		})
+	}
+
+	blocksBroken := 0
+	for _, value := range request.Stats[database.StatMined] {
+		blocksBroken += value.(int)
+	}
+
+	stats[database.StatHelpers]["bortexel:blocks_broken"] = blocksBroken
+	stats[database.StatHelpers]["bortexel:advancements_done"] = len(advancements)
+
+	var player database.StoredPlayer
+	newPlayer := database.Player{
+		UUID:         request.UUID,
+		Name:         request.Name,
+		Stats:        stats,
+		Advancements: advancements,
+	}
+
+	collection := database.Database.Collection(request.Server.String())
+	err = collection.FindOne(context.Background(), bson.D{{"uuid", request.UUID}}).Decode(&player)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// Create a new player
+			result, err := collection.InsertOne(context.Background(), newPlayer)
+			if err != nil {
+				return nil, err, http.StatusInternalServerError
+			}
+
+			err = collection.FindOne(context.Background(), bson.D{{"_id", result.InsertedID}}).Decode(&player)
+			if err != nil {
+				return nil, err, http.StatusInternalServerError
+			}
+
+			return player, nil, http.StatusOK
+		} else {
+			return nil, err, http.StatusInternalServerError
+		}
 	} else {
-		router.Use(Authorization(key))
+		_, err := collection.UpdateOne(context.Background(), bson.D{{"uuid", request.UUID}}, bson.M{"$set": newPlayer})
+		if err != nil {
+			return nil, err, http.StatusInternalServerError
+		}
+
+		err = collection.FindOne(context.Background(), bson.D{{"uuid", request.UUID}}).Decode(&player)
+		if err != nil {
+			return nil, err, http.StatusInternalServerError
+		}
+
+		return player, nil, http.StatusOK
+	}
+}
+
+func handleData(w http.ResponseWriter, data any) {
+	w.Header().Set("Content-Type", "application/json")
+
+	body, err := json.Marshal(data)
+	if err != nil {
+		return
 	}
 
-	router.Handle("/", playground.Handler("GraphQL playground", "/query"))
-	router.Handle("/query", srv)
-
-	log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)
-	log.Fatal(http.ListenAndServe(":"+port, router))
+	_, _ = w.Write(body)
 }

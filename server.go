@@ -52,7 +52,7 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type PlayerInfoRequest struct {
+type LeaderboardRequest struct {
 	Sort   SortOptions      `json:"sort"`
 	Server ServerIdentifier `json:"server"`
 }
@@ -66,7 +66,7 @@ func (i ServerIdentifier) String() string {
 	return fmt.Sprintf("%s_%d", i.ServerName, i.Season)
 }
 
-func (r PlayerInfoRequest) ShouldSort() bool {
+func (r LeaderboardRequest) ShouldSort() bool {
 	return r.Sort.FieldName != ""
 }
 
@@ -99,7 +99,7 @@ func (d SortDirection) getValue() int {
 }
 
 func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
-	var request PlayerInfoRequest
+	var request LeaderboardRequest
 	err := json.Unmarshal(body, &request)
 	if err != nil {
 		return nil, err, http.StatusUnprocessableEntity

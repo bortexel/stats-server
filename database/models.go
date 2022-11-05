@@ -14,11 +14,11 @@ type Criteria struct {
 }
 
 type StoredPlayer struct {
-	ID           string         `json:"id" bson:"_id"`
+	ID           string         `json:"-" bson:"_id"`
 	UUID         string         `json:"uuid" bson:"uuid"`
 	Name         string         `json:"name" bson:"name"`
-	Stats        StatsContainer `json:"stats" bson:"stats"`
-	Advancements []*Advancement `json:"advancements" bson:"advancements"`
+	Stats        StatsContainer `json:"stats,omitempty" bson:"stats"`
+	Advancements []*Advancement `json:"advancements,omitempty" bson:"advancements"`
 }
 
 type Player struct {

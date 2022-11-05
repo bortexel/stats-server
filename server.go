@@ -58,24 +58,6 @@ func HandleRoot(_ *http.Request, _ []byte) (any, error, int) {
 	return nil, nil, http.StatusNoContent
 }
 
-type LeaderboardRequest struct {
-	Sort   SortOptions      `json:"sort"`
-	Server ServerIdentifier `json:"server"`
-}
-
-type ServerIdentifier struct {
-	ServerName string `json:"serverName"`
-	Season     int    `json:"season"`
-}
-
-func (i ServerIdentifier) String() string {
-	return fmt.Sprintf("%s_%d", i.ServerName, i.Season)
-}
-
-func (r LeaderboardRequest) ShouldSort() bool {
-	return r.Sort.FieldName != ""
-}
-
 type SortDirection string
 
 func (d SortDirection) getValue() int {
@@ -92,8 +74,7 @@ const (
 )
 
 type SortOptions struct {
-	GroupName string        `json:"groupName"`
-	FieldName string        `json:"fieldName"`
+	Field     StatField     `json:"field"`
 	Direction SortDirection `json:"direction"`
 }
 
@@ -105,8 +86,34 @@ func (o SortOptions) GetDirection() SortDirection {
 	return SortDirectionDescending
 }
 
-func (o SortOptions) GetFullFieldPath() string {
-	return fmt.Sprintf("stats.%s.%s", o.GroupName, o.FieldName)
+type ServerIdentifier struct {
+	ServerName string `json:"serverName"`
+	Season     int    `json:"season"`
+}
+
+func (i ServerIdentifier) String() string {
+	return fmt.Sprintf("%s_%d", i.ServerName, i.Season)
+}
+
+func (r LeaderboardRequest) ShouldSort() bool {
+	return r.Sort.Field.FieldName != "" && r.Sort.Field.GroupName != ""
+}
+
+type StatField struct {
+	GroupName string `json:"groupName"`
+	FieldName string `json:"fieldName"`
+}
+
+func (f StatField) GetFullPath() string {
+	return fmt.Sprintf("stats.%s.%s", f.GroupName, f.FieldName)
+}
+
+type LeaderboardRequest struct {
+	Sort   SortOptions      `json:"sort"`
+	Server ServerIdentifier `json:"server"`
+
+	StatsFilter        []StatField `json:"filter"`
+	ReturnAdvancements bool        `json:"returnAdvancements"`
 }
 
 func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
@@ -118,8 +125,20 @@ func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
 
 	opts := options.Find()
 	if request.ShouldSort() {
-		opts.SetSort(bson.D{{request.Sort.GetFullFieldPath(), request.Sort.GetDirection().getValue()}})
+		opts.SetSort(bson.D{{request.Sort.Field.GetFullPath(), request.Sort.GetDirection().getValue()}})
 	}
+
+	projection := bson.D{{"name", 1}, {"uuid", 1}}
+
+	if request.ReturnAdvancements {
+		projection = append(projection, bson.E{Key: "advancements", Value: 1})
+	}
+
+	for _, field := range request.StatsFilter {
+		projection = append(projection, bson.E{Key: field.GetFullPath(), Value: 1})
+	}
+
+	opts.SetProjection(projection)
 
 	cursor, err := database.Database.Collection(request.Server.String()).Find(context.Background(), bson.D{}, opts)
 	if err != nil {

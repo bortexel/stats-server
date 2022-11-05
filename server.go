@@ -78,12 +78,21 @@ func (r LeaderboardRequest) ShouldSort() bool {
 
 type SortDirection string
 
+func (d SortDirection) getValue() int {
+	if d == SortDirectionAscending {
+		return 1
+	}
+
+	return -1
+}
+
 const (
 	SortDirectionAscending  = "ascending"
 	SortDirectionDescending = "descending"
 )
 
 type SortOptions struct {
+	GroupName string        `json:"groupName"`
 	FieldName string        `json:"fieldName"`
 	Direction SortDirection `json:"direction"`
 }
@@ -96,12 +105,8 @@ func (o SortOptions) GetDirection() SortDirection {
 	return SortDirectionDescending
 }
 
-func (d SortDirection) getValue() int {
-	if d == SortDirectionAscending {
-		return 1
-	}
-
-	return -1
+func (o SortOptions) GetFullFieldPath() string {
+	return fmt.Sprintf("stats.%s.%s", o.GroupName, o.FieldName)
 }
 
 func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
@@ -113,7 +118,7 @@ func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
 
 	opts := options.Find()
 	if request.ShouldSort() {
-		opts.SetSort(bson.D{{request.Sort.FieldName, request.Sort.GetDirection().getValue()}})
+		opts.SetSort(bson.D{{request.Sort.GetFullFieldPath(), request.Sort.GetDirection().getValue()}})
 	}
 
 	cursor, err := database.Database.Collection(request.Server.String()).Find(context.Background(), bson.D{}, opts)

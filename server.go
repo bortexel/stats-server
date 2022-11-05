@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/bortexel/stats-server/database"
 
@@ -115,6 +116,17 @@ type LeaderboardRequest struct {
 	PlayerName         string           `json:"playerName"`
 	StatsFilter        []StatField      `json:"filter"`
 	ReturnAdvancements bool             `json:"returnAdvancements"`
+	LimitExpansionKey  string           `json:"limitExpansionKey"`
+}
+
+const MaxRecords int64 = 100
+
+func (r LeaderboardRequest) getRecordLimit() int64 {
+	if expectedKey, ok := os.LookupEnv("LIMIT_EXPANSION_KEY"); ok && expectedKey == r.LimitExpansionKey {
+		return 0
+	}
+
+	return MaxRecords
 }
 
 func (r LeaderboardRequest) makeProjection() bson.D {
@@ -158,6 +170,7 @@ func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
 	}
 
 	opts.SetProjection(request.makeProjection())
+	opts.SetLimit(request.getRecordLimit())
 
 	cursor, err := database.Database.Collection(request.Server.String()).
 		Find(context.Background(), request.makeFilter(), opts)

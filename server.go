@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/bortexel/stats-server/database"
 
@@ -105,7 +106,15 @@ type StatField struct {
 	FieldName string `json:"fieldName"`
 }
 
-func (f StatField) GetFullPath() string {
+func (f *StatField) RemoveSpecialCharacters() {
+	f.GroupName = strings.ReplaceAll(f.GroupName, ".", "")
+	f.GroupName = strings.ReplaceAll(f.GroupName, "$", "")
+	f.FieldName = strings.ReplaceAll(f.FieldName, "$", "")
+	f.FieldName = strings.ReplaceAll(f.FieldName, "$", "")
+}
+
+func (f *StatField) GetFullPath() string {
+	f.RemoveSpecialCharacters()
 	return fmt.Sprintf("stats.%s.%s", f.GroupName, f.FieldName)
 }
 

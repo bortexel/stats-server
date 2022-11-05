@@ -36,6 +36,22 @@ type Stat struct {
 type StatsMap map[string]any
 type StatsContainer map[StatGroupName]StatsMap
 
+func (m StatsMap) GetValueSum(keyFilter func(key string) bool) int64 {
+	var result int64
+	for key, value := range m {
+		if !keyFilter(key) {
+			continue
+		}
+
+		result += int64(value.(float64))
+	}
+	return result
+}
+
+func EmptyPredicate(_ string) bool {
+	return true
+}
+
 type StatGroupName string
 
 const (
@@ -48,7 +64,8 @@ const (
 	StatMined    StatGroupName = "minecraft:mined"
 	StatPickedUp StatGroupName = "minecraft:picked_up"
 	StatUsed     StatGroupName = "minecraft:used"
-	StatHelpers  StatGroupName = "bortexel:helpers"
+
+	StatTotals StatGroupName = "bortexel:totals"
 )
 
 var defaultStatGroups = []StatGroupName{
@@ -61,7 +78,7 @@ var defaultStatGroups = []StatGroupName{
 	StatMined,
 	StatPickedUp,
 	StatUsed,
-	StatHelpers,
+	StatTotals,
 }
 
 func MakeStatsContainer() StatsContainer {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bortexel/stats-server/data"
 	"io"
 	"log"
 	"net/http"
@@ -40,7 +41,7 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err, status := next(r, body)
+	responseData, err, status := next(r, body)
 	w.WriteHeader(status)
 
 	if err != nil {
@@ -51,8 +52,8 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if data != nil {
-		handleData(w, data)
+	if responseData != nil {
+		handleData(w, responseData)
 	}
 }
 
@@ -222,26 +223,9 @@ func HandleUpdatePlayer(_ *http.Request, body []byte) (any, error, int) {
 		return nil, err, http.StatusUnprocessableEntity
 	}
 
-	advancements := make([]*database.Advancement, 0)
 	stats := request.Stats
-
-	for _, advancement := range request.Advancements {
-		if !advancement.Done {
-			continue
-		}
-
-		advancements = append(advancements, &database.Advancement{
-			Key: advancement.Key,
-		})
-	}
-
-	blocksBroken := 0
-	for _, value := range request.Stats[database.StatMined] {
-		blocksBroken += int(value.(float64))
-	}
-
-	stats[database.StatHelpers]["bortexel:blocks_broken"] = blocksBroken
-	stats[database.StatHelpers]["bortexel:advancements_done"] = len(advancements)
+	advancements := FormatAdvancements(request.Advancements)
+	AppendTotalStats(stats, len(advancements))
 
 	var player database.StoredPlayer
 	newPlayer := database.Player{
@@ -283,6 +267,35 @@ func HandleUpdatePlayer(_ *http.Request, body []byte) (any, error, int) {
 
 		return player, nil, http.StatusOK
 	}
+}
+
+func AppendTotalStats(stats database.StatsContainer, advancementsCount int) {
+	var deaths int64
+
+	if actualDeaths, ok := stats[database.StatCustom]["minecraft:deaths"]; ok {
+		deaths = int64(actualDeaths.(float64))
+	}
+
+	stats[database.StatTotals]["bortexel:deaths"] = deaths
+	stats[database.StatTotals]["bortexel:blocks_placed"] = stats[database.StatUsed].GetValueSum(data.IsBlock)
+	stats[database.StatTotals]["bortexel:blocks_broken"] = stats[database.StatMined].GetValueSum(database.EmptyPredicate)
+	stats[database.StatTotals]["bortexel:advancements_done"] = advancementsCount
+}
+
+func FormatAdvancements(inputAdvancements []*AdvancementInput) []*database.Advancement {
+	advancements := make([]*database.Advancement, 0)
+
+	for _, advancement := range inputAdvancements {
+		if !advancement.Done {
+			continue
+		}
+
+		advancements = append(advancements, &database.Advancement{
+			Key: advancement.Key,
+		})
+	}
+
+	return advancements
 }
 
 func handleData(w http.ResponseWriter, data any) {

@@ -21,9 +21,12 @@ import (
 type ActionHandler func(r *http.Request, input []byte) (output any, err error, status int)
 
 func MainHandler(w http.ResponseWriter, r *http.Request) {
+	EnableCORS(w)
 	var next ActionHandler
 
 	switch r.Method {
+	case http.MethodOptions: // CORS
+		next = HandleRoot
 	case http.MethodGet: // Root (health checks, etc.)
 		next = HandleRoot
 	case http.MethodPost: // Request leaderboard
@@ -59,6 +62,11 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 
 func HandleRoot(_ *http.Request, _ []byte) (any, error, int) {
 	return nil, nil, http.StatusNoContent
+}
+
+func EnableCORS(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
 }
 
 type SortDirection string

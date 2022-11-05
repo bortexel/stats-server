@@ -109,11 +109,40 @@ func (f StatField) GetFullPath() string {
 }
 
 type LeaderboardRequest struct {
-	Sort   SortOptions      `json:"sort"`
-	Server ServerIdentifier `json:"server"`
+	Sort               SortOptions      `json:"sort"`
+	Server             ServerIdentifier `json:"server"`
+	PlayerUUID         string           `json:"playerUUID"`
+	PlayerName         string           `json:"playerName"`
+	StatsFilter        []StatField      `json:"filter"`
+	ReturnAdvancements bool             `json:"returnAdvancements"`
+}
 
-	StatsFilter        []StatField `json:"filter"`
-	ReturnAdvancements bool        `json:"returnAdvancements"`
+func (r LeaderboardRequest) makeProjection() bson.D {
+	projection := bson.D{{"name", 1}, {"uuid", 1}}
+
+	if r.ReturnAdvancements {
+		projection = append(projection, bson.E{Key: "advancements", Value: 1})
+	}
+
+	for _, field := range r.StatsFilter {
+		projection = append(projection, bson.E{Key: field.GetFullPath(), Value: 1})
+	}
+
+	return projection
+}
+
+func (r LeaderboardRequest) makeFilter() bson.D {
+	filter := bson.D{}
+
+	if r.PlayerUUID != "" {
+		filter = append(filter, bson.E{Key: "uuid", Value: r.PlayerUUID})
+	}
+
+	if r.PlayerName != "" {
+		filter = append(filter, bson.E{Key: "name", Value: r.PlayerName})
+	}
+
+	return filter
 }
 
 func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
@@ -128,19 +157,10 @@ func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
 		opts.SetSort(bson.D{{request.Sort.Field.GetFullPath(), request.Sort.GetDirection().getValue()}})
 	}
 
-	projection := bson.D{{"name", 1}, {"uuid", 1}}
+	opts.SetProjection(request.makeProjection())
 
-	if request.ReturnAdvancements {
-		projection = append(projection, bson.E{Key: "advancements", Value: 1})
-	}
-
-	for _, field := range request.StatsFilter {
-		projection = append(projection, bson.E{Key: field.GetFullPath(), Value: 1})
-	}
-
-	opts.SetProjection(projection)
-
-	cursor, err := database.Database.Collection(request.Server.String()).Find(context.Background(), bson.D{}, opts)
+	cursor, err := database.Database.Collection(request.Server.String()).
+		Find(context.Background(), request.makeFilter(), opts)
 	if err != nil {
 		return nil, err, http.StatusInternalServerError
 	}

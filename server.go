@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/bortexel/stats-server/data"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/bortexel/stats-server/data"
 	"github.com/bortexel/stats-server/database"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -279,12 +279,18 @@ func HandleUpdatePlayer(_ *http.Request, body []byte) (any, error, int) {
 
 func AppendTotalStats(stats database.StatsContainer, advancementsCount int) {
 	var deaths int64
+	var playTime int64
 
 	if actualDeaths, ok := stats[database.StatCustom]["minecraft:deaths"]; ok {
 		deaths = int64(actualDeaths.(float64))
 	}
 
+	if actualPlayTime, ok := stats[database.StatCustom]["minecraft:play_time"]; ok {
+		playTime = int64(actualPlayTime.(float64) / 20)
+	}
+
 	stats[database.StatTotals]["bortexel:deaths"] = deaths
+	stats[database.StatTotals]["bortexel:play_time"] = playTime
 	stats[database.StatTotals]["bortexel:blocks_placed"] = stats[database.StatUsed].GetValueSum(data.IsBlock)
 	stats[database.StatTotals]["bortexel:blocks_broken"] = stats[database.StatMined].GetValueSum(database.EmptyPredicate)
 	stats[database.StatTotals]["bortexel:advancements_done"] = advancementsCount

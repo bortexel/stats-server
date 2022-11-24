@@ -45,9 +45,9 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseData, err, status := next(r, body)
-	w.WriteHeader(status)
-
 	if err != nil {
+		w.WriteHeader(status)
+
 		if status >= 500 {
 			log.Println("Error serving", r.Method, "request:", err)
 		}
@@ -56,7 +56,7 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if responseData != nil {
-		handleData(w, responseData)
+		handleData(w, status, responseData)
 	}
 }
 
@@ -312,8 +312,9 @@ func FormatAdvancements(inputAdvancements []*AdvancementInput) []*database.Advan
 	return advancements
 }
 
-func handleData(w http.ResponseWriter, data any) {
+func handleData(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
 
 	body, err := json.Marshal(data)
 	if err != nil {

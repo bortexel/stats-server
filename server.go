@@ -57,6 +57,8 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 
 	if responseData != nil {
 		handleData(w, status, responseData)
+	} else {
+		w.WriteHeader(status)
 	}
 }
 
@@ -199,8 +201,8 @@ func HandlePlayerInfo(_ *http.Request, body []byte) (any, error, int) {
 	var results []*database.StoredPlayer
 	err = cursor.All(context.Background(), &results)
 
-	if err == mongo.ErrNoDocuments || results == nil {
-		return nil, err, http.StatusNotFound
+	if err == mongo.ErrNoDocuments || results == nil || len(results) == 0 {
+		return nil, nil, http.StatusNotFound
 	}
 
 	if err != nil {

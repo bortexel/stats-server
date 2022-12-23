@@ -289,6 +289,8 @@ func AppendTotalStats(stats database.StatsContainer, advancementsCount int) {
 
 	if actualPlayTime, ok := stats[database.StatCustom]["minecraft:play_time"]; ok {
 		playTime = int64(actualPlayTime.(float64) / 20)
+	} else if actualPlayTime, ok := stats[database.StatCustom]["minecraft:play_one_minute"]; ok {
+		playTime = int64(actualPlayTime.(float64) / 20)
 	}
 
 	stats[database.StatTotals]["bortexel:deaths"] = deaths

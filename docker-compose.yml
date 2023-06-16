@@ -16,9 +16,8 @@ services:
     restart: always
     environment:
       MONGO_CONNECTION_URI: mongodb://root:root-password@mongo:27017
-      BIND_ADDR: :7474
       MUTATION_KEY: super-secret-key
-    ports: [ '7474:7474' ]
+    ports: [ '7474:8080' ]
 
 volumes:
   data:
